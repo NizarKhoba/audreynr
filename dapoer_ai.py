@@ -5,14 +5,12 @@ from dapoer_module import create_agent
 st.set_page_config(page_title="Dapoer-AI", page_icon="🍲")
 st.title("🍛 Dapoer-AI - Asisten Resep Masakan Indonesia")
 
-# Input API Key dari user
+# API Key input
 GOOGLE_API_KEY = st.text_input("Masukkan API Key Gemini kamu:", type="password")
-
 if not GOOGLE_API_KEY:
     st.warning("Silakan masukkan API key untuk mulai.")
     st.stop()
 
-# Inisialisasi agent
 agent = create_agent(GOOGLE_API_KEY)
 
 # Inisialisasi chat memory
@@ -32,9 +30,6 @@ if prompt := st.chat_input("Tanyakan resep, bahan, atau metode memasak..."):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        try:
-            response = agent.run(prompt)
-        except Exception as e:
-            response = f"⚠️ Maaf, terjadi kesalahan: {str(e)}"
+        response = agent.run(prompt)
         st.markdown(response)
         st.session_state.messages.append({"role": "assistant", "content": response})
