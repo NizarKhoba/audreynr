@@ -5,7 +5,7 @@ from dapoer_module import create_agent
 st.set_page_config(page_title="Dapoer-AI", page_icon="🍲")
 st.title("🍛 Dapoer-AI - Asisten Resep Masakan Indonesia")
 
-# Inisialisasi agent (API key sudah ditanam)
+# Inisialisasi agent (API key sudah ditanam di dapoer_module.py)
 agent = create_agent()
 
 # Inisialisasi chat memory
@@ -26,4 +26,8 @@ if prompt := st.chat_input("Tanyakan resep, bahan, atau metode memasak..."):
 
     with st.chat_message("assistant"):
         try:
-            response = agent.run(p
+            response = agent.run(prompt)
+        except Exception as e:
+            response = f"⚠️ Maaf, terjadi kesalahan: {str(e)}"
+        st.markdown(response)
+        st.session_state.messages.append({"role": "assistant", "content": response})
