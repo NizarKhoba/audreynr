@@ -69,7 +69,7 @@ def recommend_easy_recipes(query):
         return "Rekomendasi masakan mudah:\n- " + "\n- ".join(hasil)
     return "Tidak ditemukan masakan mudah yang relevan."
 
-# ✅ FIXED: Tidak pakai os.environ, langsung lewat parameter
+# ✅ FIXED: versi terbaru dengan model & task_type
 def build_vectorstore(api_key):
     docs = []
     for _, row in df_cleaned.iterrows():
@@ -81,7 +81,8 @@ def build_vectorstore(api_key):
 
     embeddings = GoogleGenerativeAIEmbeddings(
         model="models/embedding-001",
-        google_api_key=api_key
+        google_api_key=api_key,
+        task_type="retrieval_document"
     )
 
     vectorstore = FAISS.from_documents(texts, embeddings)
