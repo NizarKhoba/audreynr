@@ -1,3 +1,4 @@
+# dapoer_module.py
 import pandas as pd
 import re
 from langchain.vectorstores import FAISS
@@ -8,17 +9,19 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.agents import Tool, initialize_agent
 from langchain.memory import ConversationBufferMemory
 import random
-import time
 
-# ✅ Tanam API Key langsung
+# ✅ API Key ditanam langsung
 GOOGLE_API_KEY = "AIzaSyDffHsb87OmBDsNWbp-ZCXZul3BibMaqRY"
+
+# ✅ Prompt prefix untuk paksa Bahasa Indonesia
+SYSTEM_PREFIX = "Tolong jawab dalam Bahasa Indonesia. Kamu adalah asisten dapur ramah dan membantu pengguna mencari resep masakan khas Indonesia.\n"
 
 # Load dan bersihkan data
 CSV_FILE_PATH = 'https://raw.githubusercontent.com/audreeynr/dapoer-ai/refs/heads/main/data/Indonesian_Food_Recipes.csv'
 df = pd.read_csv(CSV_FILE_PATH)
 df_cleaned = df.dropna(subset=['Title', 'Ingredients', 'Steps']).drop_duplicates()
 
-# Normalisasi teks
+# Normalisasi
 def normalize_text(text):
     if isinstance(text, str):
         text = text.lower()
@@ -31,15 +34,15 @@ df_cleaned['Title_Normalized'] = df_cleaned['Title'].apply(normalize_text)
 df_cleaned['Ingredients_Normalized'] = df_cleaned['Ingredients'].apply(normalize_text)
 df_cleaned['Steps_Normalized'] = df_cleaned['Steps'].apply(normalize_text)
 
-# Format output resep
+# Format hasil masakan
 def format_recipe(row):
     bahan_raw = re.split(r'\n|--|,', row['Ingredients'])
     bahan_list = [b.strip().capitalize() for b in bahan_raw if b.strip()]
     bahan_md = "\n".join([f"- {b}" for b in bahan_list])
     langkah_md = row['Steps'].strip()
-    return f"""🍽 {row['Title']}\n\nBahan-bahan:\n{bahan_md}\n\nLangkah Memasak:\n{langkah_md}"""
+    return f"""🍽 {row['Title']}\n\nBahan-bahan:  \n{bahan_md}\n\nLangkah Memasak:  \n{langkah_md}"""
 
-# Tool 1: Berdasarkan judul
+# Tool 1: Cari berdasarkan judul
 def search_by_title(query):
     query_normalized = normalize_text(query)
     match_title = df_cleaned[df_cleaned['Title_Normalized'].str.contains(query_normalized)]
@@ -47,20 +50,26 @@ def search_by_title(query):
         return format_recipe(match_title.iloc[0])
     return "Resep tidak ditemukan berdasarkan judul."
 
-# Tool 2: Berdasarkan bahan
+# Tool 2: Cari berdasarkan bahan
 def search_by_ingredients(query):
     stopwords = {"masakan", "apa", "saja", "yang", "bisa", "dibuat", "dari", "menggunakan", "bahan", "resep"}
     prompt_lower = normalize_text(query)
-    bahan_keywords = [w for w in prompt_lower.split() if w not in stopwords and len(w) > 2]
+    bahan_keywords = [w for w in prompt_lower.split() if w not in stopwords and (len(w) >= 3 or w in ["tempe", "ayam", "sapi"])]
+
     if bahan_keywords:
         mask = df_cleaned['Ingredients_Normalized'].apply(lambda x: all(k in x for k in bahan_keywords))
         match_bahan = df_cleaned[mask]
         if not match_bahan.empty:
             hasil = match_bahan.head(5)['Title'].tolist()
             return "Masakan yang menggunakan bahan tersebut:\n- " + "\n- ".join(hasil)
-    return "Tidak ditemukan masakan dengan bahan tersebut."
 
-# Tool 3: Berdasarkan metode memasak
+    fallback = df_cleaned.sample(3)['Title'].tolist()
+    return (
+        "Tidak ditemukan masakan yang persis menggunakan bahan tersebut. "
+        "Berikut beberapa masakan alternatif:\n- " + "\n- ".join(fallback)
+    )
+
+# Tool 3: Cari berdasarkan metode memasak
 def search_by_method(query):
     prompt_lower = normalize_text(query)
     for metode in ['goreng', 'panggang', 'rebus', 'kukus']:
@@ -71,7 +80,7 @@ def search_by_method(query):
                 return f"Masakan yang dimasak dengan cara {metode}:\n- " + "\n- ".join(hasil)
     return "Tidak ditemukan metode memasak yang cocok."
 
-# Tool 4: Masakan mudah
+# Tool 4: Rekomendasi masakan mudah
 def recommend_easy_recipes(query):
     prompt_lower = normalize_text(query)
     if "mudah" in prompt_lower or "pemula" in prompt_lower:
@@ -79,17 +88,11 @@ def recommend_easy_recipes(query):
         return "Rekomendasi masakan mudah:\n- " + "\n- ".join(hasil)
     return "Tidak ditemukan masakan mudah yang relevan."
 
-# Cache vectorstore global
-vectorstore_cache = None
-
+# Tool 5: RAG Search
 def build_vectorstore():
-    global vectorstore_cache
-    if vectorstore_cache is not None:
-        return vectorstore_cache
-
     docs = []
     for _, row in df_cleaned.iterrows():
-        content = f"Title: {row['Title']}\nIngredients: {row['Ingredients']}\nSteps: {row['Steps']}"
+        content = f"Judul: {row['Title']}\nBahan: {row['Ingredients']}\nLangkah: {row['Steps']}"
         docs.append(Document(page_content=content))
 
     splitter = CharacterTextSplitter(chunk_size=300, chunk_overlap=30)
@@ -99,19 +102,14 @@ def build_vectorstore():
         model="models/embedding-001",
         google_api_key=GOOGLE_API_KEY
     )
-    vectorstore_cache = FAISS.from_documents(texts, embeddings)
-    return vectorstore_cache
+    vectorstore = FAISS.from_documents(texts, embeddings)
+    return vectorstore
 
-# Tool 5: RAG Search dengan timeout
 def rag_search(query):
     try:
-        start_time = time.time()
         vectorstore = build_vectorstore()
         retriever = vectorstore.as_retriever()
-        docs = retriever.get_relevant_documents(f"Jawab dalam Bahasa Indonesia: {query}")
-
-        if time.time() - start_time > 20:
-            return "⏳ Permintaan terlalu lama. Coba lagi nanti."
+        docs = retriever.get_relevant_documents(f"{SYSTEM_PREFIX}\n{query}")
 
         if not docs:
             fallback_samples = df_cleaned.sample(5)
@@ -123,9 +121,9 @@ def rag_search(query):
 
         return "\n\n".join([doc.page_content for doc in docs[:5]])
     except Exception as e:
-        return f"❌ Gagal menjalankan pencarian. Error: {str(e)}"
+        return f"Gagal menjalankan pencarian. Error: {str(e)}"
 
-# Buat agent LangChain
+# Membuat Agent
 def create_agent():
     llm = ChatGoogleGenerativeAI(
         model="gemini-1.5-flash",
@@ -138,24 +136,17 @@ def create_agent():
         Tool(name="SearchByIngredients", func=search_by_ingredients, description="Cari masakan berdasarkan bahan."),
         Tool(name="SearchByMethod", func=search_by_method, description="Cari masakan berdasarkan metode memasak."),
         Tool(name="RecommendEasyRecipes", func=recommend_easy_recipes, description="Rekomendasi masakan yang mudah dibuat."),
-        Tool(name="RAGSearch", func=rag_search, description="Cari informasi masakan menggunakan FAISS dan RAG dengan fallback.")
+        Tool(name="RAGSearch", func=rag_search, description="Cari informasi masakan menggunakan FAISS dan RAG.")
     ]
 
     memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
-
-    system_message = (
-        "Kamu adalah asisten dapur yang membantu pengguna mencari resep makanan khas Indonesia. "
-        "Semua jawaban harus dalam Bahasa Indonesia. Gunakan gaya yang ramah, jelas, dan sesuai konteks masakan."
-    )
 
     agent = initialize_agent(
         tools=tools,
         llm=llm,
         agent="zero-shot-react-description",
         memory=memory,
-        verbose=False,
-        handle_parsing_errors=True,
-        agent_kwargs={"system_message": system_message}
+        verbose=False
     )
 
     return agent
