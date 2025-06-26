@@ -119,10 +119,11 @@ def rag_search(query):
 
 def create_agent():
     llm = ChatGoogleGenerativeAI(
-        model="gemini-pro",  # ⚠️ Ganti model agar kuota lebih longgar
-        google_api_key=GOOGLE_API_KEY,
-        temperature=0.7
+    model="gemini-1.5-pro",  # ✅ Ganti dari gemini-pro ke gemini-1.5-pro
+    google_api_key=GOOGLE_API_KEY,
+    temperature=0.7
     )
+
 
     tools = [
         Tool(name="SearchByTitle", func=search_by_title, description="Cari resep berdasarkan judul masakan."),
