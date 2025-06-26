@@ -5,8 +5,15 @@ from dapoer_module import create_agent
 st.set_page_config(page_title="Dapoer-AI", page_icon="🍲")
 st.title("🍛 Dapoer-AI - Asisten Resep Masakan Indonesia")
 
-# Inisialisasi agent (API key sudah ditanam di dapoer_module.py)
-agent = create_agent()
+# Input API Key dari user
+GOOGLE_API_KEY = st.text_input("Masukkan API Key Gemini kamu:", type="password")
+
+if not GOOGLE_API_KEY:
+    st.warning("Silakan masukkan API key untuk mulai.")
+    st.stop()
+
+# Inisialisasi agent
+agent = create_agent(GOOGLE_API_KEY)
 
 # Inisialisasi chat memory
 if "messages" not in st.session_state:
