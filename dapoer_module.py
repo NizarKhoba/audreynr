@@ -1,6 +1,6 @@
-# dapoer_module.py
 import pandas as pd
 import re
+import random
 from langchain.vectorstores import FAISS
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain.text_splitter import CharacterTextSplitter
@@ -8,7 +8,6 @@ from langchain.schema import Document
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.agents import Tool, initialize_agent
 from langchain.memory import ConversationBufferMemory
-import random
 
 # Load dan bersihkan data
 CSV_FILE_PATH = 'https://raw.githubusercontent.com/audreeynr/dapoer-ai/refs/heads/main/data/Indonesian_Food_Recipes.csv'
@@ -33,12 +32,10 @@ def format_recipe(row):
     bahan_raw = re.split(r'\n|--|,', row['Ingredients'])
     bahan_list = [b.strip().capitalize() for b in bahan_raw if b.strip()]
     bahan_md = "\n".join([f"- {b}" for b in bahan_list])
-
     langkah_md = row['Steps'].strip()
-
     return f"""🍽 {row['Title']}\n\nBahan-bahan:  \n{bahan_md}\n\nLangkah Memasak:  \n{langkah_md}"""
 
-# Tool 1: Cari berdasarkan nama masakan
+# Tool 1: Cari berdasarkan judul
 def search_by_title(query):
     query_normalized = normalize_text(query)
     match_title = df_cleaned[df_cleaned['Title_Normalized'].str.contains(query_normalized)]
@@ -48,7 +45,10 @@ def search_by_title(query):
 
 # Tool 2: Cari berdasarkan bahan
 def search_by_ingredients(query):
-    stopwords = {"masakan", "apa", "saja", "yang", "bisa", "dibuat", "dari", "menggunakan", "bahan", "resep"}
+    stopwords = {
+        "masakan", "apa", "saja", "yang", "bisa", "dibuat", "dari",
+        "menggunakan", "bahan", "resep", "cari", "punya", "pakai", "memakai", "berbahan"
+    }
     prompt_lower = normalize_text(query)
     bahan_keywords = [w for w in prompt_lower.split() if w not in stopwords and len(w) > 2]
 
@@ -57,8 +57,8 @@ def search_by_ingredients(query):
         match_bahan = df_cleaned[mask]
         if not match_bahan.empty:
             hasil = match_bahan.head(5)['Title'].tolist()
-            return "Masakan yang menggunakan bahan tersebut:\n- " + "\n- ".join(hasil)
-    return "Tidak ditemukan masakan dengan bahan tersebut."
+            return "Berikut beberapa masakan yang menggunakan bahan tersebut:\n- " + "\n- ".join(hasil)
+    return "Tidak ditemukan masakan dengan bahan tersebut. Coba gunakan nama bahan yang lebih umum."
 
 # Tool 3: Cari berdasarkan metode masak
 def search_by_method(query):
@@ -74,27 +74,31 @@ def search_by_method(query):
 # Tool 4: Rekomendasi masakan mudah
 def recommend_easy_recipes(query):
     prompt_lower = normalize_text(query)
-    if "mudah" in prompt_lower or "pemula" in prompt_lower:
+    if any(kata in prompt_lower for kata in ["mudah", "gampang", "pemula", "cepat", "sederhana"]):
         hasil = df_cleaned[df_cleaned['Steps'].str.len() < 300].head(5)['Title'].tolist()
         return "Rekomendasi masakan mudah:\n- " + "\n- ".join(hasil)
-    return "Tidak ditemukan masakan mudah yang relevan."
+    return "Tidak ditemukan masakan mudah yang relevan. Coba gunakan kata seperti 'mudah' atau 'cepat'."
 
-# Tool 5: RAG dengan FAISS dan fallback RAG-Like
-
+# Tool 5: RAG dengan FAISS
 def build_vectorstore(api_key):
     docs = []
     for _, row in df_cleaned.iterrows():
-        content = f"Title: {row['Title']}\nIngredients: {row['Ingredients']}\nSteps: {row['Steps']}"
+        content = f"Judul: {row['Title']}\nBahan: {row['Ingredients']}\nLangkah: {row['Steps']}"
         docs.append(Document(page_content=content))
 
-    splitter = CharacterTextSplitter(chunk_size=300, chunk_overlap=30)
+    splitter = CharacterTextSplitter(separator="\n", chunk_size=512, chunk_overlap=50)
     texts = splitter.split_documents(docs)
 
-    # Tambahkan model name secara eksplisit
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=api_key)
-    vectorstore = FAISS.from_documents(texts, embeddings)
-    return vectorstore
-
+    try:
+        embeddings = GoogleGenerativeAIEmbeddings(
+            model="models/embedding-001",
+            google_api_key=api_key
+        )
+        vectorstore = FAISS.from_documents(texts, embeddings)
+        return vectorstore
+    except Exception as e:
+        print(f"❌ Gagal membuat vectorstore: {e}")
+        raise RuntimeError("Gagal membuat FAISS vectorstore. Coba periksa API key atau ukuran dokumen.")
 
 def rag_search(api_key, query):
     vectorstore = build_vectorstore(api_key)
@@ -111,8 +115,7 @@ def rag_search(api_key, query):
 
     return "\n\n".join([doc.page_content for doc in docs[:5]])
 
-# Membuat Agent
-
+# Agent
 def create_agent(api_key):
     llm = ChatGoogleGenerativeAI(
         model="gemini-1.5-flash",
