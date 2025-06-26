@@ -8,7 +8,7 @@ from langchain.agents import Tool, initialize_agent
 from langchain.memory import ConversationBufferMemory
 import random
 
-GOOGLE_API_KEY = "AIzaSyDffHsb87OmBDsNWbp-ZCXZul3BibMaqRY"
+GOOGLE_API_KEY = "AIzaSyCentIibOpYQxZopT6fWamYsR-7wnXqoXU"
 SYSTEM_PREFIX = (
     "Tolong jawab dalam Bahasa Indonesia. "
     "Kamu adalah asisten dapur yang ramah dan membantu pengguna mencari resep masakan khas Indonesia.\n"
