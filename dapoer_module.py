@@ -1,6 +1,5 @@
 import pandas as pd
 import re
-import os  # Tambahkan ini
 from langchain.vectorstores import FAISS
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain.text_splitter import CharacterTextSplitter
@@ -70,11 +69,8 @@ def recommend_easy_recipes(query):
         return "Rekomendasi masakan mudah:\n- " + "\n- ".join(hasil)
     return "Tidak ditemukan masakan mudah yang relevan."
 
-# ✅ UPDATE DIMULAI DARI SINI
+# ✅ FIXED: Tidak pakai os.environ, langsung lewat parameter
 def build_vectorstore(api_key):
-    # Set API key sebagai environment variable
-    os.environ["GOOGLE_API_KEY"] = api_key
-
     docs = []
     for _, row in df_cleaned.iterrows():
         content = f"Title: {row['Title']}\nIngredients: {row['Ingredients']}\nSteps: {row['Steps']}"
@@ -83,8 +79,10 @@ def build_vectorstore(api_key):
     splitter = CharacterTextSplitter(chunk_size=300, chunk_overlap=30)
     texts = splitter.split_documents(docs)
 
-    # ✅ GoogleGenerativeAIEmbeddings tanpa parameter langsung
-    embeddings = GoogleGenerativeAIEmbeddings()
+    embeddings = GoogleGenerativeAIEmbeddings(
+        model="models/embedding-001",
+        google_api_key=api_key
+    )
 
     vectorstore = FAISS.from_documents(texts, embeddings)
     return vectorstore
@@ -103,10 +101,11 @@ def rag_search(api_key, query):
     return "\n\n".join([doc.page_content for doc in docs[:5]])
 
 def create_agent(api_key):
-    os.environ["GOOGLE_API_KEY"] = api_key
     llm = ChatGoogleGenerativeAI(
         model="gemini-1.5-flash",
-        temperature=0.7
+        temperature=0.7,
+        google_api_key=api_key,
+        system_instruction="Kamu adalah asisten resep masakan Indonesia. Jawablah semua pertanyaan dalam bahasa Indonesia."
     )
 
     def rag_tool_func(query):
