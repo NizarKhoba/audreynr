@@ -124,7 +124,9 @@ def create_agent(api_key):
     )
 
     def rag_tool_func(query):
-        return rag_search(api_key, query)
+        # Tambahkan prefix agar LLM diarahkan berpikir dalam Bahasa Indonesia
+        query_id = f"Jawab dalam Bahasa Indonesia: {query}"
+        return rag_search(api_key, query_id)
 
     tools = [
         Tool(name="SearchByTitle", func=search_by_title, description="Cari resep berdasarkan judul masakan."),
@@ -134,14 +136,24 @@ def create_agent(api_key):
         Tool(name="RAGSearch", func=rag_tool_func, description="Cari informasi masakan menggunakan FAISS dan RAG dengan fallback rekomendasi acak.")
     ]
 
-    memory = ConversationBufferMemory(memory_key="chat_history")
+    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+
+    # Tambahkan sistem pesan (instruction) agar model konsisten menjawab dalam Bahasa Indonesia
+    system_message = (
+        "Kamu adalah asisten resep masakan rumahan yang ramah dan membantu. "
+        "Jawabanmu harus dalam Bahasa Indonesia. Gunakan gaya bahasa sopan, jelas, dan mudah dimengerti."
+    )
 
     agent = initialize_agent(
         tools=tools,
         llm=llm,
         agent="zero-shot-react-description",
         memory=memory,
-        verbose=False
+        verbose=False,
+        handle_parsing_errors=True,
+        agent_kwargs={
+            "system_message": system_message
+        }
     )
 
     return agent
