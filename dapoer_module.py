@@ -111,4 +111,51 @@ def rag_search(query):
         docs = retriever.get_relevant_documents(f"Jawab dalam Bahasa Indonesia: {query}")
 
         if time.time() - start_time > 20:
-            return "⏳ Permintaan terlalu lama. C
+            return "⏳ Permintaan terlalu lama. Coba lagi nanti."
+
+        if not docs:
+            fallback_samples = df_cleaned.sample(5)
+            fallback_response = "\n\n".join([
+                f"{row['Title']}:\nBahan: {row['Ingredients']}\nLangkah: {row['Steps']}"
+                for _, row in fallback_samples.iterrows()
+            ])
+            return f"Tidak ditemukan informasi yang relevan. Berikut beberapa rekomendasi masakan acak:\n\n{fallback_response}"
+
+        return "\n\n".join([doc.page_content for doc in docs[:5]])
+    except Exception as e:
+        return f"❌ Gagal menjalankan pencarian. Error: {str(e)}"
+
+# Buat agent LangChain
+def create_agent():
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-1.5-flash",
+        google_api_key=GOOGLE_API_KEY,
+        temperature=0.7
+    )
+
+    tools = [
+        Tool(name="SearchByTitle", func=search_by_title, description="Cari resep berdasarkan judul masakan."),
+        Tool(name="SearchByIngredients", func=search_by_ingredients, description="Cari masakan berdasarkan bahan."),
+        Tool(name="SearchByMethod", func=search_by_method, description="Cari masakan berdasarkan metode memasak."),
+        Tool(name="RecommendEasyRecipes", func=recommend_easy_recipes, description="Rekomendasi masakan yang mudah dibuat."),
+        Tool(name="RAGSearch", func=rag_search, description="Cari informasi masakan menggunakan FAISS dan RAG dengan fallback.")
+    ]
+
+    memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+
+    system_message = (
+        "Kamu adalah asisten dapur yang membantu pengguna mencari resep makanan khas Indonesia. "
+        "Semua jawaban harus dalam Bahasa Indonesia. Gunakan gaya yang ramah, jelas, dan sesuai konteks masakan."
+    )
+
+    agent = initialize_agent(
+        tools=tools,
+        llm=llm,
+        agent="zero-shot-react-description",
+        memory=memory,
+        verbose=False,
+        handle_parsing_errors=True,
+        agent_kwargs={"system_message": system_message}
+    )
+
+    return agent
