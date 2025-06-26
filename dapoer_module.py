@@ -11,7 +11,7 @@ from langchain.memory import ConversationBufferMemory
 import random
 
 # ✅ API Key ditanam langsung
-GOOGLE_API_KEY = "AIzaSyDffHsb87OmBDsNWbp-ZCXZul3BibMaqRY"
+GOOGLE_API_KEY = "AIzaSyAl0ftlcTqTvygaYBNaET3GCSfcBNgyh9A"
 
 # ✅ Prompt prefix untuk paksa Bahasa Indonesia
 SYSTEM_PREFIX = "Tolong jawab dalam Bahasa Indonesia. Kamu adalah asisten dapur ramah dan membantu pengguna mencari resep masakan khas Indonesia.\n"
