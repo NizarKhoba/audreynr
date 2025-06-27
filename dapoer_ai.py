@@ -4,43 +4,34 @@ from dapoer_module import create_agent
 st.set_page_config(page_title="Dapoer-AI", page_icon="🍲")
 st.title("🍛 Dapoer-AI - Asisten Resep Masakan Indonesia")
 
-# Input API Key
-OPENAI_API_KEY = st.text_input("🔐 Masukkan API Key OpenAI Anda:", type="password")
-if not OPENAI_API_KEY:
-    st.warning("⚠️ Silakan masukkan API key terlebih dahulu untuk mulai menggunakan Dapoer-AI.")
+GOOGLE_API_KEY = st.text_input("🔐 Masukkan API Key Gemini kamu:", type="password")
+if not GOOGLE_API_KEY:
+    st.warning("Masukkan dulu API key dari Google Gemini.")
     st.stop()
 
-# Inisialisasi agent
 try:
-    agent = create_agent(OPENAI_API_KEY)
+    agent = create_agent(GOOGLE_API_KEY)
 except Exception as e:
-    st.error(f"❌ Gagal inisialisasi agent:\n\n{e}")
+    st.error(f"Gagal inisialisasi Agent Gemini:\n\n{e}")
     st.stop()
 
-# Inisialisasi sesi chat
 if "messages" not in st.session_state:
-    st.session_state.messages = []
-    st.session_state.messages.append({
-        "role": "assistant",
-        "content": "👋 Hai! Mau masak apa hari ini? Ketikkan nama masakan, bahan, atau metode yang kamu ingin tahu."
-    })
+    st.session_state.messages = [{"role": "assistant", "content": "👋 Hai! Ketik nama masakan, bahan, atau metode memasak yang kamu ingin tahu."}]
 
-# Tampilkan riwayat obrolan
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# Input pengguna
-if prompt := st.chat_input("Tanyakan resep, bahan, atau metode memasak..."):
+if prompt := st.chat_input("Tanyakan resep masakan, bahan, dll..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner("Sedang mencari jawaban... 🍳"):
+        with st.spinner("Sedang memasak jawaban... 🍳"):
             try:
                 response = agent.run(prompt)
             except Exception as e:
-                response = f"⚠️ Terjadi kesalahan saat memproses permintaan:\n\n```\n{e}\n```"
+                response = f"⚠️ Error:\n\n```\n{e}\n```"
         st.markdown(response)
         st.session_state.messages.append({"role": "assistant", "content": response})
