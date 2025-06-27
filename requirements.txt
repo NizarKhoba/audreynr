@@ -1,7 +1,6 @@
-pandas
 streamlit
+pandas
+openai
 langchain
-langchain-google-genai
-langchain-community
-google-generativeai
 faiss-cpu
+tiktoken
