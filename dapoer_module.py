@@ -78,6 +78,9 @@ def recommend_easy_recipes(query):
 
 # RAG Search - hanya dipanggil jika query cukup panjang
 def build_vectorstore(api_key):
+    if not api_key or not isinstance(api_key, str):
+        raise ValueError("❌ Google API key tidak valid di build_vectorstore()")
+
     docs = []
     for _, row in df_cleaned.iterrows():
         content = f"Title: {row['Title']}\nIngredients: {row['Ingredients']}\nSteps: {row['Steps']}"
@@ -92,7 +95,6 @@ def build_vectorstore(api_key):
 
 def rag_search(api_key, query):
     if len(query.strip()) < 6:
-        # Fallback ke pencarian bahan jika query terlalu pendek
         return search_by_ingredients(query)
 
     vectorstore = build_vectorstore(api_key)
@@ -111,13 +113,17 @@ def rag_search(api_key, query):
 
 # Agent
 def create_agent(api_key):
+    if not api_key or not isinstance(api_key, str):
+        raise ValueError("❌ Google API key tidak valid atau belum disetel!")
+
     llm = ChatGoogleGenerativeAI(
         model="gemini-1.5-flash",
         google_api_key=api_key,
         temperature=0.7,
         system_instruction=(
-        "Kamu adalah asisten resep masakan Indonesia. Jawablah SEMUA pertanyaan dalam Bahasa Indonesia!"
-        "Jika ditanya soal bahan, langkah, atau nama masakan, jawab hanya menggunakan data resep yang tersedia!")
+            "Kamu adalah asisten resep masakan Indonesia. Jawablah SEMUA pertanyaan dalam Bahasa Indonesia! "
+            "Jika ditanya soal bahan, langkah, atau nama masakan, jawab hanya menggunakan data resep yang tersedia!"
+        )
     )
 
     tools = [
