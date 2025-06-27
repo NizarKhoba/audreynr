@@ -115,7 +115,10 @@ def create_agent(api_key):
         model="gemini-1.5-flash",
         google_api_key=api_key,
         temperature=0.7,
-        system_instruction="Jawablah semua pertanyaan pengguna dalam Bahasa Indonesia. Jika ditanya soal bahan, langkah, atau nama masakan, jawab secara informatif dan ramah."
+        system_instruction=(
+            "Kamu adalah asisten resep masakan Indonesia. Jawablah SEMUA pertanyaan dalam Bahasa Indonesia. "
+            "Gunakan tool yang tersedia saja, dan jangan membuat jawaban sendiri."
+        )
     )
 
     tools = [
@@ -128,12 +131,13 @@ def create_agent(api_key):
 
     memory = ConversationBufferMemory(memory_key="chat_history")
 
-    agent = initialize_agent(
+    agent = initialize_agent_executor(
         tools=tools,
         llm=llm,
-        agent="zero-shot-react-description",
+        agent_type="zero-shot-react-description",
         memory=memory,
-        verbose=False
+        verbose=False,
+        handle_parsing_errors=True
     )
 
     return agent
