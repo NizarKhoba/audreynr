@@ -16,7 +16,6 @@ df = pd.read_csv(CSV_FILE_PATH)
 df_cleaned = df.dropna(subset=['Title', 'Ingredients', 'Steps']).drop_duplicates()
 
 # Normalisasi
-
 def normalize_text(text):
     if isinstance(text, str):
         text = text.lower()
@@ -30,7 +29,6 @@ df_cleaned['Ingredients_Normalized'] = df_cleaned['Ingredients'].apply(normalize
 df_cleaned['Steps_Normalized'] = df_cleaned['Steps'].apply(normalize_text)
 
 # Format hasil masakan
-
 def format_recipe(row):
     bahan_raw = re.split(r'\n|--|,', row['Ingredients'])
     bahan_list = [b.strip().capitalize() for b in bahan_raw if b.strip()]
@@ -38,16 +36,9 @@ def format_recipe(row):
 
     langkah_md = row['Steps'].strip()
 
-    return f"""🍽 {row['Title']}
-
-Bahan-bahan:  
-{bahan_md}
-
-Langkah Memasak:  
-{langkah_md}"""
+    return f"""🍽 {row['Title']}\n\nBahan-bahan:  \n{bahan_md}\n\nLangkah Memasak:  \n{langkah_md}"""
 
 # Tool 1: Cari berdasarkan nama masakan
-
 def search_by_title(query):
     query_normalized = normalize_text(query)
     match_title = df_cleaned[df_cleaned['Title_Normalized'].str.contains(query_normalized)]
@@ -55,28 +46,21 @@ def search_by_title(query):
         return format_recipe(match_title.iloc[0])
     return "Resep tidak ditemukan berdasarkan judul."
 
-# Tool 2: Cari berdasarkan bahan (dengan fallback pertanyaan singkat)
-
+# Tool 2: Cari berdasarkan bahan
 def search_by_ingredients(query):
     stopwords = {"masakan", "apa", "saja", "yang", "bisa", "dibuat", "dari", "menggunakan", "bahan", "resep"}
     prompt_lower = normalize_text(query)
     bahan_keywords = [w for w in prompt_lower.split() if w not in stopwords and len(w) > 2]
 
-    if not bahan_keywords and len(prompt_lower.split()) == 1:
-        bahan_keywords = [prompt_lower.strip()]
-
     if bahan_keywords:
         mask = df_cleaned['Ingredients_Normalized'].apply(lambda x: all(k in x for k in bahan_keywords))
         match_bahan = df_cleaned[mask]
         if not match_bahan.empty:
-            hasil = match_bahan.head(3).apply(format_recipe, axis=1).tolist()
-            return "Berikut beberapa resep dengan bahan tersebut:\n\n" + "\n\n---\n\n".join(hasil)
-        else:
-            return f"Maaf, tidak ditemukan resep dengan bahan: {', '.join(bahan_keywords)}"
-    return "Silakan sebutkan bahan utama masakan yang ingin dicari."
+            hasil = match_bahan.head(5)['Title'].tolist()
+            return "Masakan yang menggunakan bahan tersebut:\n- " + "\n- ".join(hasil)
+    return "Tidak ditemukan masakan dengan bahan tersebut."
 
 # Tool 3: Cari berdasarkan metode masak
-
 def search_by_method(query):
     prompt_lower = normalize_text(query)
     for metode in ['goreng', 'panggang', 'rebus', 'kukus']:
@@ -87,21 +71,15 @@ def search_by_method(query):
                 return f"Masakan yang dimasak dengan cara {metode}:\n- " + "\n- ".join(hasil)
     return "Tidak ditemukan metode memasak yang cocok."
 
-# Tool 4: Rekomendasi masakan mudah atau berdasarkan mood
-
+# Tool 4: Rekomendasi masakan mudah
 def recommend_easy_recipes(query):
     prompt_lower = normalize_text(query)
     if "mudah" in prompt_lower or "pemula" in prompt_lower:
         hasil = df_cleaned[df_cleaned['Steps'].str.len() < 300].head(5)['Title'].tolist()
         return "Rekomendasi masakan mudah:\n- " + "\n- ".join(hasil)
-
-    if any(x in prompt_lower for x in ["ga mood", "malas", "lagi sedih", "gampang"]):
-        masakan = ["Ayam Geprek", "Ayam Goreng Tepung", "Ayam Suwir", "Chicken Teriyaki", "Ayam Goreng Bumbu Kuning"]
-        return "Kalau kamu lagi tidak bersemangat, coba masak salah satu dari berikut:\n- " + "\n- ".join(masakan)
-
     return "Tidak ditemukan masakan mudah yang relevan."
 
-# Tool 5: RAG dengan FAISS dan fallback
+# Tool 5: RAG dengan FAISS dan fallback RAG-Like
 
 def build_vectorstore(api_key):
     docs = []
@@ -115,6 +93,7 @@ def build_vectorstore(api_key):
     embeddings = GoogleGenerativeAIEmbeddings(google_api_key=api_key)
     vectorstore = FAISS.from_documents(texts, embeddings)
     return vectorstore
+
 
 def rag_search(api_key, query):
     vectorstore = build_vectorstore(api_key)
@@ -130,6 +109,8 @@ def rag_search(api_key, query):
         return f"Tidak ditemukan informasi yang relevan. Berikut beberapa rekomendasi masakan acak:\n\n{fallback_response}"
 
     return "\n\n".join([doc.page_content for doc in docs[:5]])
+
+# Membuat Agent
 
 def create_agent(api_key):
     llm = ChatGoogleGenerativeAI(
@@ -159,4 +140,4 @@ def create_agent(api_key):
         verbose=False
     )
 
-    return agent
+    return agent
