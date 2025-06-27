@@ -5,14 +5,14 @@ st.set_page_config(page_title="Dapoer-AI", page_icon="🍲")
 st.title("🍛 Dapoer-AI - Asisten Resep Masakan Indonesia")
 
 # Input API Key
-GOOGLE_API_KEY = st.text_input("🔐 Masukkan API Key Gemini Anda:", type="password")
-if not GOOGLE_API_KEY:
+OPENAI_API_KEY = st.text_input("🔐 Masukkan API Key OpenAI Anda:", type="password")
+if not OPENAI_API_KEY:
     st.warning("⚠️ Silakan masukkan API key terlebih dahulu untuk mulai menggunakan Dapoer-AI.")
     st.stop()
 
 # Inisialisasi agent
 try:
-    agent = create_agent(GOOGLE_API_KEY)
+    agent = create_agent(OPENAI_API_KEY)
 except Exception as e:
     st.error(f"❌ Gagal inisialisasi agent:\n\n{e}")
     st.stop()
