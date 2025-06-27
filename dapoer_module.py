@@ -1,10 +1,10 @@
 import pandas as pd
 import re
 from langchain.vectorstores import FAISS
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.schema import Document
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain.chat_models import ChatOpenAI
+from langchain.embeddings import OpenAIEmbeddings
 from langchain.agents import Tool, initialize_agent
 from langchain.memory import ConversationBufferMemory
 import random
@@ -43,7 +43,7 @@ def search_by_title(query):
         return format_recipe(match_title.iloc[0])
     return "Resep tidak ditemukan berdasarkan judul."
 
-# ✅ Tool 2: Cari berdasarkan bahan (update)
+# Tool 2: Cari berdasarkan bahan
 def search_by_ingredients(query):
     stopwords = {"masakan", "apa", "saja", "yang", "bisa", "dibuat", "dari", "menggunakan", "bahan", "resep"}
     prompt_lower = normalize_text(query)
@@ -79,9 +79,6 @@ def recommend_easy_recipes(query):
 
 # Tool 5: RAG dengan FAISS dan fallback
 def build_vectorstore(api_key):
-    if not api_key or not isinstance(api_key, str):
-        raise ValueError("❌ API Key untuk GoogleGenerativeAIEmbeddings kosong atau tidak valid.")
-
     docs = []
     for _, row in df_cleaned.iterrows():
         content = f"Title: {row['Title']}\nIngredients: {row['Ingredients']}\nSteps: {row['Steps']}"
@@ -91,7 +88,7 @@ def build_vectorstore(api_key):
     texts = splitter.split_documents(docs)
 
     try:
-        embeddings = GoogleGenerativeAIEmbeddings(google_api_key=api_key)
+        embeddings = OpenAIEmbeddings(openai_api_key=api_key)
     except Exception as e:
         raise RuntimeError(f"Gagal inisialisasi embeddings: {e}")
 
@@ -113,16 +110,16 @@ def rag_search(api_key, query):
 
     return "\n\n".join([doc.page_content for doc in docs[:5]])
 
-# ✅ Membuat Agent (dengan Bahasa Indonesia)
+# Membuat Agent
+
 def create_agent(api_key):
     if not api_key:
-        raise ValueError("❌ API Key kosong. Pastikan Anda mengisi Google API Key dengan benar.")
+        raise ValueError("❌ API Key kosong. Pastikan Anda mengisi OpenAI API Key dengan benar.")
 
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash",
-        google_api_key=api_key,
-        temperature=0.7,
-        system_instruction="Jawablah semua pertanyaan pengguna dalam Bahasa Indonesia dengan gaya ramah dan informatif."
+    llm = ChatOpenAI(
+        model_name="gpt-4",  # atau gpt-3.5-turbo
+        openai_api_key=api_key,
+        temperature=0.7
     )
 
     def rag_tool_func(query):
@@ -147,3 +144,4 @@ def create_agent(api_key):
     )
 
     return agent
+    
