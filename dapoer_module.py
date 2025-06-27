@@ -33,7 +33,7 @@ def format_recipe(row):
     bahan_list = [b.strip().capitalize() for b in bahan_raw if b.strip()]
     bahan_md = "\n".join([f"- {b}" for b in bahan_list])
     langkah_md = row['Steps'].strip()
-    return f"""🍽 {row['Title']}\n\nBahan-bahan:  \n{bahan_md}\n\nLangkah Memasak:  \n{langkah_md}"""
+    return f"""🍽 {row['Title']}\n\nBahan-bahan:\n{bahan_md}\n\nLangkah Memasak:\n{langkah_md}"""
 
 # Tool 1: Cari berdasarkan nama masakan
 def search_by_title(query):
@@ -43,7 +43,7 @@ def search_by_title(query):
         return format_recipe(match_title.iloc[0])
     return "Resep tidak ditemukan berdasarkan judul."
 
-# Tool 2: Cari berdasarkan bahan
+# ✅ Tool 2: Cari berdasarkan bahan (update)
 def search_by_ingredients(query):
     stopwords = {"masakan", "apa", "saja", "yang", "bisa", "dibuat", "dari", "menggunakan", "bahan", "resep"}
     prompt_lower = normalize_text(query)
@@ -52,9 +52,11 @@ def search_by_ingredients(query):
         mask = df_cleaned['Ingredients_Normalized'].apply(lambda x: all(k in x for k in bahan_keywords))
         match_bahan = df_cleaned[mask]
         if not match_bahan.empty:
-            hasil = match_bahan.head(5)['Title'].tolist()
-            return "Masakan yang menggunakan bahan tersebut:\n- " + "\n- ".join(hasil)
-    return "Tidak ditemukan masakan dengan bahan tersebut."
+            hasil = match_bahan.head(5).apply(format_recipe, axis=1).tolist()
+            return "Berikut beberapa resep yang menggunakan bahan tersebut:\n\n" + "\n\n---\n\n".join(hasil)
+        else:
+            return f"Tidak ditemukan resep dengan bahan: {', '.join(bahan_keywords)}"
+    return "Silakan sebutkan bahan utama masakan yang ingin dicari."
 
 # Tool 3: Cari berdasarkan metode masak
 def search_by_method(query):
@@ -111,7 +113,7 @@ def rag_search(api_key, query):
 
     return "\n\n".join([doc.page_content for doc in docs[:5]])
 
-# Membuat Agent
+# ✅ Membuat Agent (dengan Bahasa Indonesia)
 def create_agent(api_key):
     if not api_key:
         raise ValueError("❌ API Key kosong. Pastikan Anda mengisi Google API Key dengan benar.")
@@ -119,7 +121,8 @@ def create_agent(api_key):
     llm = ChatGoogleGenerativeAI(
         model="gemini-1.5-flash",
         google_api_key=api_key,
-        temperature=0.7
+        temperature=0.7,
+        system_instruction="Jawablah semua pertanyaan pengguna dalam Bahasa Indonesia dengan gaya ramah dan informatif."
     )
 
     def rag_tool_func(query):
