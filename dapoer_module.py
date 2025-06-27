@@ -1,4 +1,3 @@
-# dapoer_module.py
 import pandas as pd
 import re
 from langchain.vectorstores import FAISS
@@ -16,6 +15,7 @@ df = pd.read_csv(CSV_FILE_PATH)
 df_cleaned = df.dropna(subset=['Title', 'Ingredients', 'Steps']).drop_duplicates()
 
 # Normalisasi
+
 def normalize_text(text):
     if isinstance(text, str):
         text = text.lower()
@@ -29,16 +29,16 @@ df_cleaned['Ingredients_Normalized'] = df_cleaned['Ingredients'].apply(normalize
 df_cleaned['Steps_Normalized'] = df_cleaned['Steps'].apply(normalize_text)
 
 # Format hasil masakan
+
 def format_recipe(row):
     bahan_raw = re.split(r'\n|--|,', row['Ingredients'])
     bahan_list = [b.strip().capitalize() for b in bahan_raw if b.strip()]
     bahan_md = "\n".join([f"- {b}" for b in bahan_list])
-
     langkah_md = row['Steps'].strip()
-
-    return f"""🍽 {row['Title']}\n\nBahan-bahan:  \n{bahan_md}\n\nLangkah Memasak:  \n{langkah_md}"""
+    return f"""🍽 {row['Title']}\n\nBahan-bahan:\n{bahan_md}\n\nLangkah Memasak:\n{langkah_md}"""
 
 # Tool 1: Cari berdasarkan nama masakan
+
 def search_by_title(query):
     query_normalized = normalize_text(query)
     match_title = df_cleaned[df_cleaned['Title_Normalized'].str.contains(query_normalized)]
@@ -46,40 +46,44 @@ def search_by_title(query):
         return format_recipe(match_title.iloc[0])
     return "Resep tidak ditemukan berdasarkan judul."
 
-# Tool 2: Cari berdasarkan bahan
+# Tool 2: Cari berdasarkan bahan (ditingkatkan untuk query pendek seperti 'tempe')
+
 def search_by_ingredients(query):
-    stopwords = {"masakan", "apa", "saja", "yang", "bisa", "dibuat", "dari", "menggunakan", "bahan", "resep"}
     prompt_lower = normalize_text(query)
-    bahan_keywords = [w for w in prompt_lower.split() if w not in stopwords and len(w) > 2]
+    bahan_keywords = [w for w in prompt_lower.split() if len(w) > 2]
 
     if bahan_keywords:
-        mask = df_cleaned['Ingredients_Normalized'].apply(lambda x: all(k in x for k in bahan_keywords))
-        match_bahan = df_cleaned[mask]
+        match_bahan = df_cleaned[df_cleaned['Ingredients_Normalized'].apply(
+            lambda x: any(k in x for k in bahan_keywords))]
         if not match_bahan.empty:
-            hasil = match_bahan.head(5)['Title'].tolist()
-            return "Masakan yang menggunakan bahan tersebut:\n- " + "\n- ".join(hasil)
-    return "Tidak ditemukan masakan dengan bahan tersebut."
+            hasil = match_bahan.head(5).apply(format_recipe, axis=1).tolist()
+            return "Berikut beberapa resep yang menggunakan bahan tersebut:\n\n" + "\n\n---\n\n".join(hasil)
+        else:
+            return f"Tidak ditemukan resep dengan bahan: {', '.join(bahan_keywords)}"
+    return "Silakan sebutkan bahan utama masakan yang ingin dicari."
 
 # Tool 3: Cari berdasarkan metode masak
+
 def search_by_method(query):
     prompt_lower = normalize_text(query)
     for metode in ['goreng', 'panggang', 'rebus', 'kukus']:
         if metode in prompt_lower:
             cocok = df_cleaned[df_cleaned['Steps_Normalized'].str.contains(metode)]
             if not cocok.empty:
-                hasil = cocok.head(5)['Title'].tolist()
-                return f"Masakan yang dimasak dengan cara {metode}:\n- " + "\n- ".join(hasil)
+                hasil = cocok.head(5).apply(format_recipe, axis=1).tolist()
+                return f"Berikut resep dengan metode memasak {metode}:\n\n" + "\n\n---\n\n".join(hasil)
     return "Tidak ditemukan metode memasak yang cocok."
 
 # Tool 4: Rekomendasi masakan mudah
+
 def recommend_easy_recipes(query):
     prompt_lower = normalize_text(query)
     if "mudah" in prompt_lower or "pemula" in prompt_lower:
-        hasil = df_cleaned[df_cleaned['Steps'].str.len() < 300].head(5)['Title'].tolist()
-        return "Rekomendasi masakan mudah:\n- " + "\n- ".join(hasil)
+        hasil = df_cleaned[df_cleaned['Steps'].str.len() < 300].head(5).apply(format_recipe, axis=1).tolist()
+        return "Rekomendasi masakan mudah:\n\n" + "\n\n---\n\n".join(hasil)
     return "Tidak ditemukan masakan mudah yang relevan."
 
-# Tool 5: RAG dengan FAISS dan fallback RAG-Like
+# Tool 5: RAG dengan FAISS dan fallback
 
 def build_vectorstore(api_key):
     docs = []
@@ -94,7 +98,6 @@ def build_vectorstore(api_key):
     vectorstore = FAISS.from_documents(texts, embeddings)
     return vectorstore
 
-
 def rag_search(api_key, query):
     vectorstore = build_vectorstore(api_key)
     retriever = vectorstore.as_retriever()
@@ -103,8 +106,7 @@ def rag_search(api_key, query):
     if not docs:
         fallback_samples = df_cleaned.sample(5)
         fallback_response = "\n\n".join([
-            f"{row['Title']}:\nBahan: {row['Ingredients']}\nLangkah: {row['Steps']}"
-            for _, row in fallback_samples.iterrows()
+            format_recipe(row) for _, row in fallback_samples.iterrows()
         ])
         return f"Tidak ditemukan informasi yang relevan. Berikut beberapa rekomendasi masakan acak:\n\n{fallback_response}"
 
@@ -116,7 +118,8 @@ def create_agent(api_key):
     llm = ChatGoogleGenerativeAI(
         model="gemini-1.5-flash",
         google_api_key=api_key,
-        temperature=0.7
+        temperature=0.7,
+        system_instruction="Jawablah dalam Bahasa Indonesia dan bantu pengguna menemukan resep berdasarkan pertanyaan mereka."
     )
 
     def rag_tool_func(query):
@@ -127,7 +130,7 @@ def create_agent(api_key):
         Tool(name="SearchByIngredients", func=search_by_ingredients, description="Cari masakan berdasarkan bahan."),
         Tool(name="SearchByMethod", func=search_by_method, description="Cari masakan berdasarkan metode memasak."),
         Tool(name="RecommendEasyRecipes", func=recommend_easy_recipes, description="Rekomendasi masakan yang mudah dibuat."),
-        Tool(name="RAGSearch", func=rag_tool_func, description="Cari informasi masakan menggunakan FAISS dan RAG dengan fallback rekomendasi acak.")
+        Tool(name="RAGSearch", func=rag_tool_func, description="Cari informasi masakan menggunakan FAISS dan RAG.")
     ]
 
     memory = ConversationBufferMemory(memory_key="chat_history")
