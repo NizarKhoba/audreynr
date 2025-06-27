@@ -8,6 +8,9 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.agents import Tool, initialize_agent
 from langchain.memory import ConversationBufferMemory
 
+# Cache untuk vectorstore
+dapoer_vectorstore_cache = None
+
 # Load dan bersihkan data
 CSV_FILE_PATH = 'https://raw.githubusercontent.com/audreeynr/dapoer-ai/refs/heads/main/data/Indonesian_Food_Recipes.csv'
 df = pd.read_csv(CSV_FILE_PATH)
@@ -32,9 +35,9 @@ def format_recipe(row):
     bahan_list = [b.strip().capitalize() for b in bahan_raw if b.strip()]
     bahan_md = "\n".join([f"- {b}" for b in bahan_list])
     langkah_md = row['Steps'].strip()
-    return f"""🍽 {row['Title']}\n\nBahan-bahan:\n{bahan_md}\n\nLangkah Memasak:\n{langkah_md}"""
+    return f"""\n🍽 {row['Title']}\n\nBahan-bahan:\n{bahan_md}\n\nLangkah Memasak:\n{langkah_md}"""
 
-# Tool 1: Cari berdasarkan judul
+# Tool: Berdasarkan judul
 def search_by_title(query):
     query_normalized = normalize_text(query)
     match = df_cleaned[df_cleaned['Title_Normalized'].str.contains(query_normalized)]
@@ -42,7 +45,7 @@ def search_by_title(query):
         return format_recipe(match.iloc[0])
     return "Resep tidak ditemukan berdasarkan judul."
 
-# Tool 2: Cari berdasarkan bahan
+# Tool: Berdasarkan bahan
 def search_by_ingredients(query):
     stopwords = {"masakan", "apa", "saja", "yang", "bisa", "dibuat", "dari", "menggunakan", "bahan", "resep"}
     prompt_lower = normalize_text(query)
@@ -57,7 +60,7 @@ def search_by_ingredients(query):
             return f"Tidak ditemukan resep dengan bahan: {', '.join(bahan_keywords)}"
     return "Silakan sebutkan bahan utama masakan yang ingin dicari."
 
-# Tool 3: Cari berdasarkan metode masak
+# Tool: Berdasarkan metode
 def search_by_method(query):
     prompt_lower = normalize_text(query)
     for metode in ['goreng', 'panggang', 'rebus', 'kukus']:
@@ -68,50 +71,53 @@ def search_by_method(query):
                 return f"Masakan yang dimasak dengan cara {metode}:\n- " + "\n- ".join(hasil)
     return "Tidak ditemukan metode memasak yang cocok."
 
-# Tool 4: Rekomendasi masakan mudah
+# Tool: Rekomendasi mudah
 def recommend_easy_recipes(query):
     prompt_lower = normalize_text(query)
-    if "mudah" in prompt_lower or "pemula" in prompt_lower:
+    keyword_easy = ["mudah", "pemula", "gampang", "cepat", "simple", "capek", "lelah"]
+    if any(k in prompt_lower for k in keyword_easy):
         hasil = df_cleaned[df_cleaned['Steps'].str.len() < 300].head(5)['Title'].tolist()
-        return "Rekomendasi masakan mudah:\n- " + "\n- ".join(hasil)
+        return "Kamu lagi lelah ya? Nih beberapa resep simpel yang bisa dicoba:\n- " + "\n- ".join(hasil)
     return "Tidak ditemukan masakan mudah yang relevan."
 
-# RAG Search - hanya dipanggil jika query cukup panjang
+# Tool: RAG Search
 def build_vectorstore(api_key):
-    if not api_key or not isinstance(api_key, str):
-        raise ValueError("❌ Google API key tidak valid di build_vectorstore()")
+    global dapoer_vectorstore_cache
+    if dapoer_vectorstore_cache:
+        return dapoer_vectorstore_cache
 
-    docs = []
-    for _, row in df_cleaned.iterrows():
-        content = f"Title: {row['Title']}\nIngredients: {row['Ingredients']}\nSteps: {row['Steps']}"
-        docs.append(Document(page_content=content))
+    docs = [
+        Document(page_content=f"Title: {row['Title']}\nIngredients: {row['Ingredients']}\nSteps: {row['Steps']}")
+        for _, row in df_cleaned.iterrows()
+    ]
 
     splitter = CharacterTextSplitter(chunk_size=300, chunk_overlap=30)
     texts = splitter.split_documents(docs)
 
     embeddings = GoogleGenerativeAIEmbeddings(google_api_key=api_key)
-    vectorstore = FAISS.from_documents(texts, embeddings)
-    return vectorstore
+    dapoer_vectorstore_cache = FAISS.from_documents(texts, embeddings)
+    return dapoer_vectorstore_cache
 
 def rag_search(api_key, query):
     if len(query.strip()) < 6:
         return search_by_ingredients(query)
 
-    vectorstore = build_vectorstore(api_key)
-    retriever = vectorstore.as_retriever()
-    docs = retriever.get_relevant_documents(query)
+    try:
+        vectorstore = build_vectorstore(api_key)
+        retriever = vectorstore.as_retriever()
+        docs = retriever.get_relevant_documents(query)
 
-    if not docs:
-        fallback_samples = df_cleaned.sample(5)
-        fallback_response = "\n\n".join([
-            f"{row['Title']}:\nBahan: {row['Ingredients']}\nLangkah: {row['Steps']}"
-            for _, row in fallback_samples.iterrows()
-        ])
-        return f"Tidak ditemukan informasi yang relevan. Berikut beberapa rekomendasi masakan acak:\n\n{fallback_response}"
+        if not docs:
+            fallback = df_cleaned.sample(3)
+            return "Resep tidak ditemukan. Berikut rekomendasi acak:\n\n" + "\n\n".join(
+                [format_recipe(row) for _, row in fallback.iterrows()])
 
-    return "\n\n".join([doc.page_content for doc in docs[:5]])
+        return "\n\n".join([doc.page_content for doc in docs[:3]])
 
-# Agent
+    except Exception as e:
+        return f"Terjadi kesalahan saat pencarian resep: {str(e)}"
+
+# Agent utama
 def create_agent(api_key):
     if not api_key or not isinstance(api_key, str):
         raise ValueError("❌ Google API key tidak valid atau belum disetel!")
@@ -121,8 +127,8 @@ def create_agent(api_key):
         google_api_key=api_key,
         temperature=0.7,
         system_instruction=(
-            "Kamu adalah asisten resep masakan Indonesia. Jawablah SEMUA pertanyaan dalam Bahasa Indonesia! "
-            "Jika ditanya soal bahan, langkah, atau nama masakan, jawab hanya menggunakan data resep yang tersedia!"
+            "Kamu adalah asisten resep masakan Indonesia. Jawablah SEMUA pertanyaan dalam Bahasa Indonesia. "
+            "Gunakan hanya tools (SearchByTitle, SearchByIngredients, dll) untuk menjawab."
         )
     )
 
