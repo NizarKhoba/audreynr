@@ -5,7 +5,8 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.schema import Document
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.agents import Tool, initialize_agent_executor
+from langchain.agents import Tool
+from langchain.agents.executor import initialize_agent_executor
 from langchain.memory import ConversationBufferMemory
 
 # Load data
