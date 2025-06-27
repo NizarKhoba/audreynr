@@ -117,7 +117,7 @@ def create_agent(api_key):
         raise ValueError("❌ API Key kosong. Pastikan Anda mengisi OpenAI API Key dengan benar.")
 
     llm = ChatOpenAI(
-        model_name="gpt-4",  # atau gpt-3.5-turbo
+        model="gpt-3.5-turbo",
         openai_api_key=api_key,
         temperature=0.7
     )
