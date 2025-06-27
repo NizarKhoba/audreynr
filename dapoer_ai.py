@@ -1,4 +1,3 @@
-# dapoer_ai.py
 import streamlit as st
 from dapoer_module import create_agent
 
@@ -11,7 +10,12 @@ if not GOOGLE_API_KEY:
     st.warning("Silakan masukkan API key untuk mulai.")
     st.stop()
 
-agent = create_agent(GOOGLE_API_KEY)
+# Inisialisasi agent dengan try-except
+try:
+    agent = create_agent(GOOGLE_API_KEY)
+except Exception as e:
+    st.error(f"Gagal inisialisasi agent: {e}")
+    st.stop()
 
 # Inisialisasi chat memory
 if "messages" not in st.session_state:
@@ -30,6 +34,9 @@ if prompt := st.chat_input("Tanyakan resep, bahan, atau metode memasak..."):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        response = agent.run(prompt)
+        try:
+            response = agent.run(prompt)
+        except Exception as e:
+            response = f"⚠️ Terjadi kesalahan saat memproses permintaan:\n\n```\n{e}\n```"
         st.markdown(response)
         st.session_state.messages.append({"role": "assistant", "content": response})
