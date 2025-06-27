@@ -138,7 +138,7 @@ def create_agent(api_key):
         model="gemini-1.5-flash",
         google_api_key=api_key,
         temperature=0.7,
-        system_instruction="Jawablah semua pertanyaan dalam Bahasa Indonesia dengan nada ramah dan informatif."
+        system_instruction="Jawablah semua pertanyaan menggunakan Bahasa Indonesia dengan benar dan informatif."
     )
 
     def rag_tool_func(query):
